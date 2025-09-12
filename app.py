@@ -23,7 +23,7 @@ st.set_page_config(
 def init_groq():
     try:
         # Replace with your actual Groq API key
-        client = Groq(api_key="your_groq_api_key_here")
+        client = Groq(api_key="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")
         return client
     except:
         return None
