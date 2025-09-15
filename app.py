@@ -29,10 +29,10 @@ def init_groq():
 
 groq_client = init_groq()
 
-# Sample data based on worksheet
+# Corrected sample data based on Excel worksheet - EXACT MATCH
 @st.cache_data
 def load_financial_data():
-    # Data from July 2025
+    # Data from July 2025 (EXACTLY as per Excel)
     july_data = {
         'Company': ['INNOVSPACE', 'INFRASTRIDE', 'TAMALATARIANS', 'NELLI', 'SENSE7AI'],
         'Bank_Opening': [31059983, 0, 0, 0, 914190],
@@ -49,20 +49,20 @@ def load_financial_data():
         'Month': 'July 2025'
     }
 
-    # Data till August 2025
+    # Data till August 26, 2025 (EXACTLY as per Excel)
     august_data = {
         'Company': ['INNOVSPACE', 'INFRASTRIDE', 'TAMALATARIANS', 'SENSE7AI'],
-        'Bank_Opening': [42825588, 0, 0, 36991650],  # corrected to match July closing
-        'Cash_Opening': [456, 4000000, 0, 0],
-        'Loan_Opening': [30000000, 0, 0, 0],
-        'Revenue': [16163818, 300101, 0, 28008877],
-        'CAPEX_Fixed': [33090055, 1919250, 567855, 59000],
-        'CAPEX_Variable': [200000, 309801, 20000, 0],
-        'OPEX_Fixed': [12626618, 0, 0, 15774999],
-        'OPEX_Variable': [137058, 0, 0, 0],
-        'Loan_Closing': [0, 0, 0, 25000000],
-        'Bank_Closing': [14717769, 0, 0, 23635549],
-        'Cash_Closing': [2806, 400000, 0, 0],
+        'Bank_Opening': [42825588, 0, 0, 36991650],  # CORRECTED: INFRASTRIDE has 0, SENSE7AI matches July closing
+        'Cash_Opening': [456, 400000, 0, 0],  # CORRECTED: INFRASTRIDE has 400000, not 0
+        'Loan_Opening': [30000000, 0, 0, 0],  # CORRECTED: Only INNOVSPACE has loan
+        'Revenue': [16163318, 300101, 0, 28008877],  # CORRECTED: INNOVSPACE 16163318, INFRASTRIDE 300101, SENSE7AI 28008877
+        'CAPEX_Fixed': [33090055, 1919250, 567855, 59000],  # CORRECTED: All values as per Excel
+        'CAPEX_Variable': [200000, 309801, 20000, 0],  # CORRECTED: All values as per Excel
+        'OPEX_Fixed': [12626618, 0, 0, 15774999],  # CORRECTED: Only INNOVSPACE and SENSE7AI have OPEX
+        'OPEX_Variable': [137058, 0, 0, 0],  # CORRECTED: Only INNOVSPACE has variable OPEX
+        'Loan_Closing': [25000000, 0, 0, 25000000],  # CORRECTED: Both INNOVSPACE and SENSE7AI have closing loans
+        'Bank_Closing': [14717769, 0, 0, 23635549],  # CORRECTED: As per Excel
+        'Cash_Closing': [2806, 400000, 0, 0],  # CORRECTED: INFRASTRIDE has 400000
         'Month': 'August 2025'
     }
 
@@ -143,15 +143,34 @@ def get_ai_insights(data, question, role):
         return "Groq AI service is not available. Please check your API key configuration."
 
     try:
+        # Format data with rupee symbols for AI context
+        formatted_data = data.copy()
+        money_columns = ['Bank_Opening', 'Cash_Opening', 'Loan_Opening', 'Revenue', 'CAPEX_Fixed', 
+                        'CAPEX_Variable', 'OPEX_Fixed', 'OPEX_Variable', 'Loan_Closing', 'Bank_Closing', 'Cash_Closing']
+        
+        for col in money_columns:
+            if col in formatted_data.columns:
+                formatted_data[col] = formatted_data[col].apply(lambda x: f"₹{x:,.0f}")
+
         context = f"""
         You are a financial AI assistant for an executive dashboard.
         IMPORTANT: You must only use the provided financial data below. 
         Do NOT use outside knowledge or assumptions.
+        
+        CRITICAL: Always format all monetary values with the rupee symbol (₹) and proper Indian number formatting (e.g., ₹12,51,559 or ₹1,23,45,678).
+        When presenting any financial figures, calculations, or analysis, ensure ALL numbers are in rupees with proper formatting.
 
         User role: {role}
 
         Financial Data Summary:
-        {data.to_string()}
+        {formatted_data.to_string()}
+
+        Key Instructions for responses:
+        1. Always use ₹ symbol before any monetary amount
+        2. Use Indian number formatting with commas (lakhs, crores when appropriate)
+        3. For large numbers, you can mention crores/lakhs: e.g., ₹1.25 crores for ₹1,25,00,000
+        4. Ensure all calculations maintain rupee formatting
+        5. When comparing values, always show them in rupees
 
         Provide insights strictly based on the user's question: {question}
         """
@@ -180,7 +199,7 @@ def main_dashboard():
     permissions = get_role_permissions(st.session_state.user_role)
 
     # Header
-    st.title("💰 Executive Financial Dashboard")
+    st.title("💰 Executive Financial Dashboard - Comprehensive View")
     st.sidebar.success(f"Logged in as: **{st.session_state.user_role.replace('_', ' ').title()}**")
 
     if st.sidebar.button("Logout"):
@@ -203,10 +222,10 @@ def main_dashboard():
     # Executive Summary
     if permissions.get('view_summary', False):
         st.header("📈 Executive Summary")
-
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Total Revenue", f"₹{filtered_df['Revenue'].sum():,.0f}")
+            total_revenue = filtered_df['Revenue'].sum()
+            st.metric("Total Revenue", f"₹{total_revenue:,.0f}")
         with col2:
             total_capex = filtered_df['CAPEX_Fixed'].sum() + filtered_df['CAPEX_Variable'].sum()
             st.metric("Total CAPEX", f"₹{total_capex:,.0f}")
@@ -217,103 +236,210 @@ def main_dashboard():
             net_cash = filtered_df['Bank_Closing'].sum() + filtered_df['Cash_Closing'].sum()
             st.metric("Net Cash Position", f"₹{net_cash:,.0f}")
 
-    # Tabs
+    # SINGLE PAGE COMPREHENSIVE CHARTS
     if permissions.get('view_company_breakdown', False):
-        tab1, tab2, tab3, tab4 = st.tabs(["📊 Company Analysis", "💰 Cash Flow", "📈 Trends", "🤖 AI Insights"])
-
-        with tab1:
-            st.header("Company-wise Financial Breakdown")
-            chart_type = st.selectbox("Select Chart Type", ["Bar Chart", "Pie Chart", "Stacked Bar", "Treemap"])
-
-            if chart_type == "Bar Chart":
-                fig = px.bar(filtered_df, x='Company', y='Revenue', color='Month', title='Revenue by Company')
-                st.plotly_chart(fig, use_container_width=True)
-            elif chart_type == "Pie Chart":
-                revenue_by_company = filtered_df.groupby('Company')['Revenue'].sum()
-                fig = px.pie(values=revenue_by_company.values, names=revenue_by_company.index,
-                             title='Revenue Distribution')
-                st.plotly_chart(fig, use_container_width=True)
-            elif chart_type == "Stacked Bar":
-                expense_data = filtered_df.melt(
-                    id_vars=['Company', 'Month'],
-                    value_vars=['CAPEX_Fixed', 'CAPEX_Variable', 'OPEX_Fixed', 'OPEX_Variable'],
-                    var_name='Expense_Type', value_name='Amount'
-                )
-                fig = px.bar(expense_data, x='Company', y='Amount', color='Expense_Type',
-                             title='Expense Breakdown by Company')
-                st.plotly_chart(fig, use_container_width=True)
-            elif chart_type == "Treemap":
-                treemap_data = []
-                for _, row in filtered_df.iterrows():
-                    treemap_data.extend([
-                        {'Category': 'Revenue', 'Company': row['Company'], 'Value': row['Revenue']},
-                        {'Category': 'CAPEX', 'Company': row['Company'], 'Value': row['CAPEX_Fixed'] + row['CAPEX_Variable']},
-                        {'Category': 'OPEX', 'Company': row['Company'], 'Value': row['OPEX_Fixed'] + row['OPEX_Variable']}
-                    ])
-                treemap_df = pd.DataFrame(treemap_data)
-                if not treemap_df.empty:
-                    fig = px.treemap(treemap_df, path=['Category', 'Company'], values='Value',
-                                     title='Financial Overview Treemap')
-                    st.plotly_chart(fig, use_container_width=True)
-
-        with tab2:
-            if permissions.get('view_cashflow', False):
-                st.header("Cash Flow Analysis")
-                cash_flow_data = []
-                for _, row in filtered_df.iterrows():
-                    opening_cash = row['Bank_Opening'] + row['Cash_Opening']
-                    closing_cash = row['Bank_Closing'] + row['Cash_Closing']
-                    cash_flow_data.append({
-                        'Company': row['Company'],
-                        'Month': row['Month'],
-                        'Opening_Cash': opening_cash,
-                        'Closing_Cash': closing_cash,
-                        'Cash_Flow': closing_cash - opening_cash
-                    })
-                cash_flow_df = pd.DataFrame(cash_flow_data)
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=cash_flow_df['Company'], y=cash_flow_df['Opening_Cash'],
-                                         mode='lines+markers', name='Opening Cash'))
-                fig.add_trace(go.Scatter(x=cash_flow_df['Company'], y=cash_flow_df['Closing_Cash'],
-                                         mode='lines+markers', name='Closing Cash'))
-                fig.update_layout(title='Cash Position Comparison', xaxis_title='Company', yaxis_title='Amount (₹)')
-                st.plotly_chart(fig, use_container_width=True)
-
-                # Format rupees in table
-                display_df = cash_flow_df.copy()
-                for col in ['Opening_Cash', 'Closing_Cash', 'Cash_Flow']:
-                    display_df[col] = display_df[col].apply(lambda x: f"₹{x:,.0f}")
-                st.dataframe(display_df, use_container_width=True)
-
-        with tab3:
-            st.header("Financial Trends")
-            if len(filtered_df['Month'].unique()) > 1:
-                trend_metrics = ['Revenue', 'CAPEX_Fixed', 'OPEX_Fixed']
-                selected_metric = st.selectbox("Select Metric for Trend", trend_metrics)
-                fig = px.line(filtered_df, x='Month', y=selected_metric, color='Company',
-                              title=f'{selected_metric} Trend Over Time')
-                st.plotly_chart(fig, use_container_width=True)
+        st.header("📊 Comprehensive Financial Analysis")
+        
+        # Create a 2x3 grid of charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 1. Revenue by Company Bar Chart
+            st.subheader("Revenue by Company")
+            revenue_df = filtered_df[filtered_df['Revenue'] > 0]  # Filter out zero revenues
+            if not revenue_df.empty:
+                fig1 = px.bar(revenue_df, x='Company', y='Revenue', color='Month', 
+                             title='Revenue Distribution by Company',
+                             labels={'Revenue': 'Revenue (₹)'})
+                fig1.update_layout(height=400)
+                st.plotly_chart(fig1, use_container_width=True)
             else:
-                st.info("Select multiple months to view trends")
+                st.info("No revenue data available for selected filters")
 
-        with tab4:
-            st.header("🤖 AI Financial Assistant")
+        with col2:
+            # 2. Revenue Distribution Pie Chart
+            st.subheader("Revenue Share Distribution")
+            revenue_by_company = filtered_df.groupby('Company')['Revenue'].sum()
+            revenue_by_company = revenue_by_company[revenue_by_company > 0]  # Filter out zero revenues
+            if not revenue_by_company.empty:
+                fig2 = px.pie(values=revenue_by_company.values, names=revenue_by_company.index,
+                             title='Company Revenue Share')
+                fig2.update_layout(height=400)
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.info("No revenue data available for pie chart")
+
+        # 3. Cash Flow Analysis (Full Width)
+        if permissions.get('view_cashflow', False):
+            st.subheader("💰 Cash Flow Analysis")
+            cash_flow_data = []
+            for _, row in filtered_df.iterrows():
+                opening_cash = row['Bank_Opening'] + row['Cash_Opening']
+                closing_cash = row['Bank_Closing'] + row['Cash_Closing']
+                cash_flow_data.append({
+                    'Company': row['Company'],
+                    'Month': row['Month'],
+                    'Opening_Cash': opening_cash,
+                    'Closing_Cash': closing_cash,
+                    'Cash_Flow': closing_cash - opening_cash,
+                    'Revenue': row['Revenue']
+                })
+            
+            cash_flow_df = pd.DataFrame(cash_flow_data)
+            
+            col3, col4 = st.columns(2)
+            
+            with col3:
+                # Cash Position Waterfall Chart
+                fig3 = go.Figure()
+                companies = cash_flow_df['Company'].unique()
+                opening_values = []
+                closing_values = []
+                
+                for company in companies:
+                    company_data = cash_flow_df[cash_flow_df['Company'] == company]
+                    opening_values.append(company_data['Opening_Cash'].sum())
+                    closing_values.append(company_data['Closing_Cash'].sum())
+                
+                fig3.add_trace(go.Bar(name='Opening Cash', x=companies, y=opening_values,
+                                     marker_color='lightblue'))
+                fig3.add_trace(go.Bar(name='Closing Cash', x=companies, y=closing_values,
+                                     marker_color='darkblue'))
+                
+                fig3.update_layout(title='Cash Position Comparison',
+                                  xaxis_title='Company',
+                                  yaxis_title='Amount (₹)',
+                                  barmode='group',
+                                  height=400)
+                st.plotly_chart(fig3, use_container_width=True)
+            
+            with col4:
+                # Cash Flow vs Revenue Scatter Plot
+                fig4 = px.scatter(cash_flow_df, x='Revenue', y='Cash_Flow', 
+                                 color='Company', size='Closing_Cash',
+                                 title='Revenue vs Cash Flow Analysis',
+                                 labels={'Cash_Flow': 'Net Cash Flow (₹)', 'Revenue': 'Revenue (₹)'})
+                fig4.update_layout(height=400)
+                st.plotly_chart(fig4, use_container_width=True)
+
+        # 4. Expense Breakdown Analysis
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            # Stacked Bar Chart for Expenses
+            st.subheader("Expense Breakdown by Company")
+            expense_data = []
+            for _, row in filtered_df.iterrows():
+                expense_data.extend([
+                    {'Company': row['Company'], 'Month': row['Month'], 'Type': 'CAPEX Fixed', 'Amount': row['CAPEX_Fixed']},
+                    {'Company': row['Company'], 'Month': row['Month'], 'Type': 'CAPEX Variable', 'Amount': row['CAPEX_Variable']},
+                    {'Company': row['Company'], 'Month': row['Month'], 'Type': 'OPEX Fixed', 'Amount': row['OPEX_Fixed']},
+                    {'Company': row['Company'], 'Month': row['Month'], 'Type': 'OPEX Variable', 'Amount': row['OPEX_Variable']}
+                ])
+            
+            expense_df = pd.DataFrame(expense_data)
+            expense_df = expense_df[expense_df['Amount'] > 0]  # Filter out zero expenses
+            
+            if not expense_df.empty:
+                fig5 = px.bar(expense_df, x='Company', y='Amount', color='Type',
+                             title='Expense Categories by Company')
+                fig5.update_layout(height=400)
+                st.plotly_chart(fig5, use_container_width=True)
+            else:
+                st.info("No expense data available")
+
+        with col6:
+            # Financial Trends Over Time
+            st.subheader("Financial Trends Over Time")
+            if len(filtered_df['Month'].unique()) > 1:
+                # Create trend data
+                trend_data = []
+                for month in filtered_df['Month'].unique():
+                    month_data = filtered_df[filtered_df['Month'] == month]
+                    trend_data.append({
+                        'Month': month,
+                        'Total_Revenue': month_data['Revenue'].sum(),
+                        'Total_CAPEX': month_data['CAPEX_Fixed'].sum() + month_data['CAPEX_Variable'].sum(),
+                        'Total_OPEX': month_data['OPEX_Fixed'].sum() + month_data['OPEX_Variable'].sum()
+                    })
+                
+                trend_df = pd.DataFrame(trend_data)
+                
+                fig6 = go.Figure()
+                fig6.add_trace(go.Scatter(x=trend_df['Month'], y=trend_df['Total_Revenue'],
+                                         mode='lines+markers', name='Revenue', line=dict(color='green')))
+                fig6.add_trace(go.Scatter(x=trend_df['Month'], y=trend_df['Total_CAPEX'],
+                                         mode='lines+markers', name='CAPEX', line=dict(color='red')))
+                fig6.add_trace(go.Scatter(x=trend_df['Month'], y=trend_df['Total_OPEX'],
+                                         mode='lines+markers', name='OPEX', line=dict(color='orange')))
+                
+                fig6.update_layout(title='Financial Metrics Trend',
+                                  xaxis_title='Month',
+                                  yaxis_title='Amount (₹)',
+                                  height=400)
+                st.plotly_chart(fig6, use_container_width=True)
+            else:
+                st.info("Select 'All' months to view trends")
+
+        # 5. Treemap for Complete Financial Overview (Full Width)
+        st.subheader("🗺️ Financial Overview Treemap")
+        treemap_data = []
+        for _, row in filtered_df.iterrows():
+            if row['Revenue'] > 0:
+                treemap_data.append({'Category': 'Revenue', 'Company': row['Company'], 'Value': row['Revenue']})
+            if row['CAPEX_Fixed'] + row['CAPEX_Variable'] > 0:
+                treemap_data.append({'Category': 'CAPEX', 'Company': row['Company'], 'Value': row['CAPEX_Fixed'] + row['CAPEX_Variable']})
+            if row['OPEX_Fixed'] + row['OPEX_Variable'] > 0:
+                treemap_data.append({'Category': 'OPEX', 'Company': row['Company'], 'Value': row['OPEX_Fixed'] + row['OPEX_Variable']})
+        
+        if treemap_data:
+            treemap_df = pd.DataFrame(treemap_data)
+            fig7 = px.treemap(treemap_df, path=['Category', 'Company'], values='Value',
+                             title='Complete Financial Overview',
+                             color='Value', color_continuous_scale='RdYlBu')
+            fig7.update_layout(height=500)
+            st.plotly_chart(fig7, use_container_width=True)
+
+        # AI Insights Section
+        st.header("🤖 AI Financial Assistant")
+        col7, col8 = st.columns([2, 1])
+        
+        with col7:
             st.write("Ask questions about your financial data:")
             predefined_questions = [
                 "What are the key financial insights from this data?",
                 "Which company has the best cash flow position?",
                 "What are the major expense categories?",
                 "How can we optimize our financial performance?",
-                "What trends do you see in our revenue?"
+                "What trends do you see in our revenue?",
+                "Which companies are most capital intensive?",
+                "What is the cash burn rate analysis?"
             ]
             selected_question = st.selectbox("Choose a predefined question:", [""] + predefined_questions)
             custom_question = st.text_area("Or ask your own question:")
             question = selected_question if selected_question else custom_question
+            
             if st.button("Get AI Insights") and question:
                 with st.spinner("Analyzing financial data..."):
                     insights = get_ai_insights(filtered_df, question, st.session_state.user_role)
                     st.write("**AI Analysis:**")
                     st.write(insights)
+        
+        with col8:
+            # Quick Stats
+            st.write("**Quick Statistics:**")
+            if not filtered_df.empty:
+                stats = {
+                    "Active Companies": len(filtered_df['Company'].unique()),
+                    "Months Covered": len(filtered_df['Month'].unique()),
+                    "Total Records": len(filtered_df),
+                    "Avg Revenue": f"₹{filtered_df['Revenue'].mean():,.0f}",
+                    "Highest Revenue": f"₹{filtered_df['Revenue'].max():,.0f}",
+                    "Total Cash Flow": f"₹{(filtered_df['Bank_Closing'] + filtered_df['Cash_Closing'] - filtered_df['Bank_Opening'] - filtered_df['Cash_Opening']).sum():,.0f}"
+                }
+                
+                for key, value in stats.items():
+                    st.metric(key, value)
 
     # Detailed Financial Data
     if permissions.get('view_detailed_financials', False):
